@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.Veylo" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/veylo_forest_deep</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

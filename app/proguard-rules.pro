@@ -1,0 +1,3 @@
+-keepattributes *Annotation*, InnerClasses
+-keepclassmembers class com.veylo.app.** { *** Companion; }
+-keep,includedescriptorclasses class com.veylo.app.**$$serializer { *; }

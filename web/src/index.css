@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 247 247 242;
+  --card: 255 255 255;
+  --card-alt: 240 241 234;
+  --ink: 28 33 29;
+  --muted: 119 125 118;
+  --line: 231 234 227;
+  --lime-tint: 239 249 220;
+  --owe: 194 65 45;
+  --owe-bg: 252 231 227;
+  --owed: 47 122 31;
+  --owed-bg: 231 246 213;
+  --warn: 196 128 0;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: 12 19 14;
+  --card: 23 32 25;
+  --card-alt: 31 42 34;
+  --ink: 233 238 233;
+  --muted: 154 165 156;
+  --line: 42 53 44;
+  --lime-tint: 36 51 36;
+  --owe: 255 138 117;
+  --owe-bg: 58 33 29;
+  --owed: 180 240 106;
+  --owed-bg: 34 58 27;
+  --warn: 255 193 77;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-bg font-sans text-ink antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea,
+select {
+  @apply text-ink;
+}
+
+/* Hide number spinners */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+
+.skeleton {
+  @apply relative overflow-hidden rounded-2xl bg-cardalt;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+  animation: shimmer 1.4s infinite;
+}
+.dark .skeleton::after {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.06), transparent);
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

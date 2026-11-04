@@ -1,0 +1,22 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+
+# Built APKs (attach to a GitHub Release instead)
+release/*.apk
+
+# Web
+node_modules/
+dist/
+dev-dist/
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
