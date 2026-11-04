@@ -86,7 +86,7 @@ export function upiLink(opts: { upiId: string; name: string; amount: number; not
   return `upi://pay?${q.toString()}`
 }
 
-export const isValidUpi = (v: string) => /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$/.test(v.trim())
+export const isValidUpi = (v: string) => /^[a-zA-Z0-9._-]{2,200}@[a-zA-Z]{2,64}$/.test(v.trim())
 
 export function downloadFile(name: string, content: string, type = 'application/json') {
   const a = document.createElement('a')

@@ -34,7 +34,7 @@ create table if not exists members (
   group_id    uuid not null references groups(id) on delete cascade,
   name        text not null check (char_length(name) between 1 and 40),
   device_id   text,
-  upi_id      text check (upi_id is null or upi_id ~ '^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$'),
+  upi_id      text check (upi_id is null or upi_id ~ '^[a-zA-Z0-9._-]{2,200}@[a-zA-Z]{2,64}$'),
   joined_at   timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   revision    int not null default 1,
