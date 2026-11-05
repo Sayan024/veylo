@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,6 +7,16 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
 }
+
+// Cloud settings come from local.properties (not committed):
+//   veylo.supabaseUrl=https://xxxx.supabase.co
+//   veylo.supabaseAnonKey=eyJ...   (public anon key only)
+//   veylo.webUrl=https://your-site.vercel.app
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun cfg(key: String, default: String = "") = (localProps.getProperty(key) ?: System.getenv(key.uppercase().replace(".", "_")) ?: default).trim()
 
 android {
     namespace = "com.veylo.app"
@@ -14,9 +26,12 @@ android {
         applicationId = "com.veylo.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "SUPABASE_URL", "\"${cfg("veylo.supabaseUrl")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${cfg("veylo.supabaseAnonKey")}\"")
+        buildConfigField("String", "WEB_URL", "\"${cfg("veylo.webUrl", "https://web-tau-tan-53.vercel.app")}\"")
     }
 
     buildTypes {
@@ -30,7 +45,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 dependencies {
@@ -46,6 +64,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
 

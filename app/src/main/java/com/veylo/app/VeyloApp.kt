@@ -5,6 +5,8 @@ import android.content.Context
 import androidx.room.Room
 import com.veylo.app.data.ProfileStore
 import com.veylo.app.data.VeyloRepository
+import com.veylo.app.data.cloud.CloudApi
+import com.veylo.app.data.cloud.CloudSync
 import com.veylo.app.data.local.VeyloDatabase
 import com.veylo.app.data.sync.SyncEngine
 import kotlinx.coroutines.CoroutineScope
@@ -25,9 +27,14 @@ class VeyloApp : Application() {
 class AppContainer(context: Context) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val db: VeyloDatabase = Room.databaseBuilder(context, VeyloDatabase::class.java, "veylo.db")
-        .fallbackToDestructiveMigration()
+        .addMigrations(VeyloDatabase.MIGRATION_1_2)
         .build()
     val profiles = ProfileStore(context)
     val repository = VeyloRepository(context, db.dao(), profiles)
-    val sync = SyncEngine(context, db.dao(), profiles, repository.changes, appScope)
+    val cloud = CloudSync(
+        context, db.dao(), profiles,
+        CloudApi(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY),
+        repository.changes, appScope, BuildConfig.WEB_URL,
+    )
+    val sync = SyncEngine(context, db.dao(), profiles, repository.changes, appScope, onReceived = cloud::onReceivedOverBluetooth)
 }

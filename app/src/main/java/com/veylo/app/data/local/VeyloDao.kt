@@ -100,8 +100,30 @@ interface VeyloDao {
     @Query("DELETE FROM members WHERE groupId = :groupId") suspend fun deleteMembersOfGroup(groupId: String)
     @Query("DELETE FROM groups WHERE id = :groupId") suspend fun deleteGroupRow(groupId: String)
 
+    // ---- Cloud outbox ----
+    @Query("SELECT * FROM outbox ORDER BY at ASC")
+    suspend fun outbox(): List<OutboxEntity>
+
+    @Query("SELECT * FROM outbox WHERE kind = :kind AND entityId = :entityId LIMIT 1")
+    suspend fun outboxFor(kind: String, entityId: String): OutboxEntity?
+
+    @Upsert suspend fun upsertOutbox(op: OutboxEntity)
+
+    @Query("DELETE FROM outbox WHERE id = :id")
+    suspend fun deleteOutbox(id: String)
+
+    @Query("DELETE FROM outbox WHERE groupId = :groupId")
+    suspend fun deleteOutboxOfGroup(groupId: String)
+
+    @Query("SELECT COUNT(*) FROM outbox")
+    fun outboxCount(): Flow<Int>
+
+    @Query("SELECT * FROM groups WHERE shared = 1 AND cloudToken IS NOT NULL")
+    suspend fun sharedGroups(): List<GroupEntity>
+
     @Transaction
     suspend fun deleteGroup(groupId: String) {
+        deleteOutboxOfGroup(groupId)
         deleteSplitsOfGroup(groupId)
         deleteExpensesOfGroup(groupId)
         deleteSettlementsOfGroup(groupId)

@@ -49,6 +49,8 @@ class SyncEngine(
     private val profiles: ProfileStore,
     changes: SharedFlow<LocalChange>,
     private val scope: CoroutineScope,
+    /** Lets cloud sync upload things that arrived over Bluetooth. (kind, groupId, entityId) */
+    private val onReceived: (String, String, String) -> Unit = { _, _, _ -> },
 ) {
     enum class Role { IDLE, HOST, SEARCHING, CONNECTING, MEMBER }
 
@@ -301,7 +303,13 @@ class SyncEngine(
 
             is GroupMsg -> if (!isHost) {
                 val local = dao.group(msg.group.id)
-                dao.upsertGroup(msg.group.copy(coverUri = local?.coverUri))
+                // Cloud membership is per phone: never take it from another device.
+                dao.upsertGroup(
+                    msg.group.copy(
+                        coverUri = local?.coverUri, shared = local?.shared ?: false, cloudToken = local?.cloudToken,
+                        myMemberId = local?.myMemberId, lastPulledAt = local?.lastPulledAt,
+                    )
+                )
             }
 
             is MemberMsg -> {
@@ -310,6 +318,7 @@ class SyncEngine(
                 // Never let someone else overwrite an existing member's device link.
                 if (existing?.deviceId != null && existing.deviceId != msg.member.deviceId) return
                 dao.upsertMember(msg.member)
+                onReceived("member", msg.member.groupId, msg.member.id)
                 if (isHost) relay(ep) { send(it, msg) }
             }
 
@@ -339,7 +348,9 @@ class SyncEngine(
         // Link to an existing member (same phone, or a name-only member with the same name).
         val members = dao.membersOf(gid)
         val existing = members.firstOrNull { it.deviceId == hello.deviceId }
-            ?: members.firstOrNull { it.deviceId == null && it.name.trim().equals(hello.name.trim(), ignoreCase = true) }
+            ?: members.firstOrNull {
+                (it.deviceId == null || it.deviceId == "linked") && it.name.trim().equals(hello.name.trim(), ignoreCase = true)
+            }
         val member = existing?.copy(deviceId = hello.deviceId, upiId = hello.upiId ?: existing.upiId)
             ?: MemberEntity(UUID.randomUUID().toString(), gid, hello.name.trim(), hello.deviceId, hello.upiId, System.currentTimeMillis())
         dao.upsertMember(member)
@@ -355,7 +366,7 @@ class SyncEngine(
         dao.promoteLocalSettlements(gid)
 
         // Initial ledger snapshot (tombstones included so deletions propagate).
-        send(ep, GroupMsg(g.copy(coverUri = null)))
+        send(ep, GroupMsg(g.copy(coverUri = null, cloudToken = null, myMemberId = null, lastPulledAt = null)))
         dao.membersOf(gid).forEach { send(ep, MemberMsg(it)) }
         dao.allExpensesOf(gid).forEach { e ->
             sendTracked(ep, e.id, ExpenseMsg(e.copy(receiptUri = null), dao.splitsOf(e.id)))
@@ -382,6 +393,7 @@ class SyncEngine(
             return
         }
         dao.saveExpense(e.copy(syncStatus = SyncStatus.SYNCED, receiptUri = local?.receiptUri), splits)
+        onReceived("expense", e.groupId, e.id)
         send(ep, Ack(e.id, e.updatedAt))
         if (isHost) relay(ep) { sendTracked(it, e.id, ExpenseMsg(e.copy(receiptUri = null), splits)) }
     }
@@ -406,6 +418,7 @@ class SyncEngine(
             return
         }
         dao.upsertSettlement(s.copy(syncStatus = SyncStatus.SYNCED))
+        onReceived("settlement", s.groupId, s.id)
         send(ep, Ack(s.id, s.updatedAt))
         if (isHost) relay(ep) { sendTracked(it, s.id, SettlementMsg(s)) }
     }

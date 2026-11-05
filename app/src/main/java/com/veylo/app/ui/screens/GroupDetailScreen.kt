@@ -165,6 +165,7 @@ fun GroupDetailScreen(vm: AppViewModel, nav: Nav, groupId: String) {
                                     live && sync.role == SyncEngine.Role.HOST -> "Hosting · ${sync.connectedCount}"
                                     live -> "Live"
                                     g.unsyncedCount > 0 -> "${g.unsyncedCount} to sync"
+                                    g.group.shared -> "Online"
                                     g.hasOtherDevices -> "Synced"
                                     else -> "Offline"
                                 },

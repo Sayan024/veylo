@@ -78,6 +78,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val sync = c.sync
     val profile: StateFlow<Profile> = c.profiles.profile
     val syncState = sync.state
+    val cloud = c.cloud
+    val cloudState = cloud.state
 
     private val dao = repo.dao
 
@@ -113,7 +115,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 splits = ge.associate { it.id to splitsByExpense[it.id].orEmpty() },
                 settlements = gs, balances = balances,
                 transfers = SettlementCalculator.minimize(balances),
-                me = gm.firstOrNull { it.deviceId == profile.deviceId },
+                me = gm.firstOrNull { it.id == g.myMemberId } ?: gm.firstOrNull { it.deviceId == profile.deviceId },
             )
         }
         val activity = summaries.flatMap { s ->
@@ -176,6 +178,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.recordSettlement(groupId, from, to, amount) }
 
     fun deleteSettlement(id: String) = viewModelScope.launch { repo.deleteSettlement(id) }
+
+    // ---------------- Cloud ----------------
+
+    fun shareOnline(groupId: String, onResult: (Result<String>) -> Unit) = viewModelScope.launch {
+        onResult(runCatching { cloud.shareGroup(groupId) })
+    }
+
+    fun previewInvite(code: String, onResult: (Result<com.veylo.app.data.cloud.CloudSync.InvitePreview>) -> Unit) = viewModelScope.launch {
+        onResult(runCatching { cloud.preview(code) })
+    }
+
+    fun joinOnline(code: String, memberId: String?, onResult: (Result<String>) -> Unit) = viewModelScope.launch {
+        onResult(runCatching { cloud.join(code, memberId) })
+    }
+
+    fun syncCloudNow() = viewModelScope.launch { cloud.syncNow() }
 
     fun deleteAllData() = viewModelScope.launch {
         sync.stop()

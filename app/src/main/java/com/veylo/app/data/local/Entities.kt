@@ -1,5 +1,6 @@
 package com.veylo.app.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -38,6 +39,14 @@ data class GroupEntity(
     val hostDeviceId: String,
     val createdAt: Long,
     val updatedAt: Long,
+    /** True once the group exists in VEYLO Cloud (Supabase). */
+    @ColumnInfo(defaultValue = "0") val shared: Boolean = false,
+    /** Secret proving this phone's cloud membership. Never sent over Bluetooth. */
+    val cloudToken: String? = null,
+    /** This phone's member id in the group (cloud-joined groups). */
+    val myMemberId: String? = null,
+    /** Server time of the last successful cloud pull. */
+    val lastPulledAt: String? = null,
 )
 
 @Serializable
@@ -50,6 +59,8 @@ data class MemberEntity(
     val deviceId: String? = null,
     val upiId: String? = null,
     val joinedAt: Long,
+    /** Last revision accepted by the cloud (0 = never uploaded). */
+    @ColumnInfo(defaultValue = "0") val revision: Int = 0,
 )
 
 @Serializable
@@ -69,6 +80,7 @@ data class ExpenseEntity(
     val createdByDevice: String,
     val deleted: Boolean = false,
     val syncStatus: String,
+    @ColumnInfo(defaultValue = "0") val revision: Int = 0,
 )
 
 @Serializable
@@ -94,4 +106,19 @@ data class SettlementEntity(
     val createdByDevice: String,
     val deleted: Boolean = false,
     val syncStatus: String,
+    @ColumnInfo(defaultValue = "0") val revision: Int = 0,
+)
+
+/** Queued cloud upload. Read the latest local copy of the entity when it runs. */
+@Entity(tableName = "outbox")
+data class OutboxEntity(
+    @PrimaryKey val id: String,
+    val groupId: String,
+    /** group | member | expense | settlement */
+    val kind: String,
+    val entityId: String,
+    /** Cloud revision the local edit was based on (conflict detection). */
+    val baseRevision: Int,
+    val at: Long,
+    val attempts: Int = 0,
 )

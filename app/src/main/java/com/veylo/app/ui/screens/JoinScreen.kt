@@ -58,6 +58,9 @@ import com.veylo.app.ui.components.VTextField
 import com.veylo.app.ui.navigation.Nav
 import com.veylo.app.ui.theme.Palette
 import com.veylo.app.ui.theme.Veylo
+import com.veylo.app.data.cloud.CloudSync
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.foundation.layout.height
 
 @Composable
 fun JoinScreen(vm: AppViewModel, nav: Nav) {
@@ -66,6 +69,19 @@ fun JoinScreen(vm: AppViewModel, nav: Nav) {
     var codeFor by remember { mutableStateOf<SyncEngine.FoundGroup?>(null) }
     var started by remember { mutableStateOf(false) }
     val startSearch = rememberNearbyPermission { started = true; vm.sync.search() }
+    val cloud by vm.cloudState.collectAsStateWithLifecycle()
+    var onlineCode by remember { mutableStateOf("") }
+    var preview by remember { mutableStateOf<CloudSync.InvitePreview?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    fun findOnline(code: String) {
+        if (code.length != 6) return
+        busy = true
+        vm.previewInvite(code) { r ->
+            busy = false
+            r.onSuccess { preview = it }.onFailure { Toast.makeText(ctx, it.message ?: "No group found", Toast.LENGTH_LONG).show() }
+        }
+    }
 
     LaunchedEffect(Unit) { startSearch() }
     com.veylo.app.ui.components.DarkHeaderStatusBar()
@@ -86,8 +102,13 @@ fun JoinScreen(vm: AppViewModel, nav: Nav) {
         val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
         GmsBarcodeScanning.getClient(ctx, options).startScan()
             .addOnSuccessListener { b ->
-                val parts = b.rawValue.orEmpty().split(":")
-                if (parts.size == 3 && parts[0] == "veylo") {
+                val raw = b.rawValue.orEmpty()
+                val parts = raw.split(":")
+                val webCode = Regex("[?&]code=([A-Za-z0-9]{6})").find(raw)?.groupValues?.get(1)?.uppercase()
+                if (webCode != null && cloud.enabled) {
+                    onlineCode = webCode
+                    findOnline(webCode)
+                } else if (parts.size == 3 && parts[0] == "veylo") {
                     vm.sync.useInvite(parts[1], parts[2])
                     Toast.makeText(ctx, "Invite scanned — connecting when the host is found", Toast.LENGTH_SHORT).show()
                 } else {
@@ -100,14 +121,21 @@ fun JoinScreen(vm: AppViewModel, nav: Nav) {
     Column(Modifier.fillMaxSize().background(Palette.ForestDeep)) {
         Row(Modifier.statusBarsPadding().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             IconCircle(Icons.AutoMirrored.Rounded.ArrowBack, { nav.back() }, bg = androidx.compose.ui.graphics.Color(0x22FFFFFF), tint = androidx.compose.ui.graphics.Color.White)
-            Text("Join nearby group", style = MaterialTheme.typography.titleLarge, color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(start = 12.dp))
+            Text("Join group", style = MaterialTheme.typography.titleLarge, color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(start = 12.dp))
         }
 
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(Modifier.size(220.dp), contentAlignment = Alignment.Center) {
+            if (cloud.enabled) {
+                OnlineJoinCard(onlineCode, { onlineCode = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(6) }, busy, cloud.online) {
+                    findOnline(onlineCode)
+                }
+                Spacer(Modifier.height(18.dp))
+                Text("Or join a phone nearby (no internet)", style = MaterialTheme.typography.titleSmall, color = androidx.compose.ui.graphics.Color.White)
+            }
+            Box(Modifier.size(if (cloud.enabled) 150.dp else 220.dp), contentAlignment = Alignment.Center) {
                 Radar(Modifier.fillMaxSize())
             }
             Text(
@@ -161,6 +189,41 @@ fun JoinScreen(vm: AppViewModel, nav: Nav) {
         }
     }
 
+    preview?.let { p ->
+        val myName = vm.profile.value.name
+        var claim by remember(p) {
+            mutableStateOf(p.members.firstOrNull { !it.claimed && it.name.trim().equals(myName.trim(), true) }?.id)
+        }
+        AlertDialog(
+            onDismissRequest = { if (!busy) preview = null },
+            title = { Text("Join ${p.name}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        listOf(p.destination, "${p.members.size} members", p.currency).filter { it.isNotBlank() }.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall, color = Veylo.colors.muted,
+                    )
+                    Text("Which one is you?", style = MaterialTheme.typography.titleSmall)
+                    p.members.filter { !it.claimed }.forEach { m ->
+                        ChoiceRow(m.name, claim == m.id) { claim = m.id }
+                    }
+                    ChoiceRow("I'm new — join as $myName", claim == null) { claim = null }
+                }
+            },
+            confirmButton = {
+                TextButton({
+                    busy = true
+                    vm.joinOnline(onlineCode, claim) { r ->
+                        busy = false
+                        r.onSuccess { id -> preview = null; nav.groupReplacing(id) }
+                            .onFailure { Toast.makeText(ctx, it.message ?: "Couldn't join", Toast.LENGTH_LONG).show() }
+                    }
+                }, enabled = !busy) { Text(if (busy) "Joining…" else "Join") }
+            },
+            dismissButton = { TextButton({ preview = null }, enabled = !busy) { Text("Cancel") } },
+        )
+    }
+
     codeFor?.let { f ->
         var code by remember(f) { mutableStateOf("") }
         AlertDialog(
@@ -178,5 +241,36 @@ fun JoinScreen(vm: AppViewModel, nav: Nav) {
             },
             dismissButton = { TextButton({ codeFor = null }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun OnlineJoinCard(code: String, onCode: (String) -> Unit, busy: Boolean, online: Boolean, onFind: () -> Unit) {
+    VCard(Modifier.fillMaxWidth()) {
+        Text("Join online with a code", style = MaterialTheme.typography.titleMedium)
+        Text(
+            if (online) "Works with groups shared from the app or the VEYLO website." else "You're offline — connect to the internet to join online.",
+            style = MaterialTheme.typography.bodySmall, color = Veylo.colors.muted,
+        )
+        Spacer(Modifier.height(10.dp))
+        VTextField(
+            code, onCode, "6-character invite code", placeholder = "ABC123",
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+        )
+        Spacer(Modifier.height(10.dp))
+        VButton(if (busy) "Checking…" else "Find group", onFind, Modifier.fillMaxWidth(), enabled = code.length == 6 && !busy && online)
+    }
+}
+
+@Composable
+private fun ChoiceRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(if (selected) Veylo.colors.limeTint else Veylo.colors.cardAlt)
+            .clickable(onClick = onClick).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        if (selected) Icon(Icons.Rounded.Check, null, tint = MaterialTheme.colorScheme.primary)
     }
 }

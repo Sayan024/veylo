@@ -63,6 +63,13 @@ import com.veylo.app.ui.components.VCard
 import com.veylo.app.ui.theme.Palette
 import com.veylo.app.ui.theme.Veylo
 import java.math.BigDecimal
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 /** Returns a function that requests Nearby permissions, then runs [onGranted]. */
 @Composable
@@ -133,12 +140,16 @@ fun SyncSheet(vm: AppViewModel, g: GroupSummary, onDismiss: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
     ) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Nearby sync", style = MaterialTheme.typography.headlineSmall)
+            Text("Invite & sync", style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(14.dp))
+            CloudCard(vm, g)
+            Spacer(Modifier.height(20.dp))
+            Text("Nearby (Bluetooth)", style = MaterialTheme.typography.titleMedium)
             Text(
                 "Phones sync directly over Bluetooth & Wi-Fi. No internet needed.",
                 style = MaterialTheme.typography.bodySmall, color = Veylo.colors.muted, textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(14.dp))
 
             if (isHostPhone) {
                 if (activeHere && s.role == SyncEngine.Role.HOST) {
@@ -208,6 +219,84 @@ fun SyncSheet(vm: AppViewModel, g: GroupSummary, onDismiss: () -> Unit) {
                     modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Veylo.colors.oweBg).padding(10.dp),
                 )
             }
+        }
+    }
+}
+
+/** Online (internet) sharing — the same groups the VEYLO website uses. */
+@Composable
+private fun CloudCard(vm: AppViewModel, g: GroupSummary) {
+    val ctx = LocalContext.current
+    val cloud by vm.cloudState.collectAsStateWithLifecycle()
+    var busy by remember { mutableStateOf(false) }
+    if (!cloud.enabled) {
+        Text(
+            "Online sync isn't set up in this build.",
+            style = MaterialTheme.typography.bodySmall, color = Veylo.colors.muted,
+        )
+        return
+    }
+    VCard(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Cloud, null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(8.dp))
+            Text("Online", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            val status = when {
+                !g.group.shared -> "Not shared yet"
+                !cloud.online -> "Offline · ${g.unsyncedCount} waiting"
+                cloud.syncing -> "Syncing…"
+                g.unsyncedCount > 0 -> "${g.unsyncedCount} to upload"
+                else -> "Up to date"
+            }
+            Text(status, style = MaterialTheme.typography.labelMedium, color = Veylo.colors.muted)
+        }
+        Spacer(Modifier.height(8.dp))
+        if (!g.group.shared) {
+            Text(
+                "Share this group online so friends can join from anywhere — in this app or on the VEYLO website.",
+                style = MaterialTheme.typography.bodySmall, color = Veylo.colors.muted,
+            )
+            Spacer(Modifier.height(12.dp))
+            VButton(
+                if (busy) "Uploading…" else "Share online",
+                {
+                    busy = true
+                    vm.shareOnline(g.group.id) { r ->
+                        busy = false
+                        r.exceptionOrNull()?.let { Toast.makeText(ctx, it.message ?: "Couldn't share", Toast.LENGTH_LONG).show() }
+                    }
+                },
+                Modifier.fillMaxWidth(), icon = Icons.Rounded.CloudUpload, enabled = !busy,
+            )
+        } else {
+            val link = vm.cloud.inviteLink(g.group.joinCode)
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.clip(RoundedCornerShape(20.dp)).background(Color.White).padding(10.dp)) {
+                    QrImage(link, Modifier.size(170.dp))
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Invite code", style = MaterialTheme.typography.labelMedium, color = Veylo.colors.muted)
+                Text(g.group.joinCode, style = MaterialTheme.typography.headlineMedium, letterSpacing = 6.sp)
+                Text(
+                    "Works in the app (+ → Join) and on the website.",
+                    style = MaterialTheme.typography.bodySmall, color = Veylo.colors.muted, textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    VButton("Sync now", { vm.syncCloudNow() }, Modifier.weight(1f), icon = Icons.Rounded.Sync, style = ButtonStyle.Soft, height = 46.dp)
+                    VButton("Share link", {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, "Join \"${g.group.name}\" on VEYLO: $link (code ${g.group.joinCode})")
+                        }
+                        ctx.startActivity(Intent.createChooser(send, "Share invite"))
+                    }, Modifier.weight(1f), icon = Icons.Rounded.Share, height = 46.dp)
+                }
+            }
+        }
+        cloud.error?.takeIf { g.group.shared && cloud.online }?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = Veylo.colors.oweFg)
         }
     }
 }

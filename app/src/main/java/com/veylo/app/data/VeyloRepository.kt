@@ -48,15 +48,16 @@ class VeyloRepository(
     ): String {
         val now = System.currentTimeMillis()
         val id = UUID.randomUUID().toString()
+        val myId = UUID.randomUUID().toString()
         dao.upsertGroup(
             GroupEntity(
                 id = id, name = name.trim(), type = type, destination = destination.trim(),
                 currency = currency, coverUri = coverUri, startDate = startDate, endDate = endDate,
-                joinCode = newJoinCode(), hostDeviceId = me.deviceId, createdAt = now, updatedAt = now,
+                joinCode = newJoinCode(), hostDeviceId = me.deviceId, createdAt = now, updatedAt = now, myMemberId = myId,
             )
         )
         dao.upsertMember(
-            MemberEntity(UUID.randomUUID().toString(), id, me.name.ifBlank { "You" }, me.deviceId, me.upiId.ifBlank { null }, now)
+            MemberEntity(myId, id, me.name.ifBlank { "You" }, me.deviceId, me.upiId.ifBlank { null }, now)
         )
         otherMembers.map { it.trim() }.filter { it.isNotEmpty() }.distinct().forEachIndexed { i, n ->
             dao.upsertMember(MemberEntity(UUID.randomUUID().toString(), id, n, null, null, now + i + 1))
@@ -159,7 +160,7 @@ class VeyloRepository(
         val others = dao.membersOf(groupId).any { it.deviceId != null && it.deviceId != me.deviceId }
         val g = dao.group(groupId)
         val joined = g != null && g.hostDeviceId != me.deviceId
-        return if (others || joined) SyncStatus.PENDING else SyncStatus.LOCAL
+        return if (others || joined || g?.shared == true) SyncStatus.PENDING else SyncStatus.LOCAL
     }
 
     private fun newJoinCode(): String {
