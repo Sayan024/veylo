@@ -45,6 +45,7 @@ class VeyloRepository(
         startDate: Long?,
         endDate: Long?,
         otherMembers: List<String>,
+        theme: String = "vacation",
     ): String {
         val now = System.currentTimeMillis()
         val id = UUID.randomUUID().toString()
@@ -53,7 +54,7 @@ class VeyloRepository(
             GroupEntity(
                 id = id, name = name.trim(), type = type, destination = destination.trim(),
                 currency = currency, coverUri = coverUri, startDate = startDate, endDate = endDate,
-                joinCode = newJoinCode(), hostDeviceId = me.deviceId, createdAt = now, updatedAt = now, myMemberId = myId,
+                joinCode = newJoinCode(), hostDeviceId = me.deviceId, createdAt = now, updatedAt = now, myMemberId = myId, theme = theme,
             )
         )
         dao.upsertMember(
@@ -119,14 +120,34 @@ class VeyloRepository(
 
     // ---------------- Settlements ----------------
 
-    suspend fun recordSettlement(groupId: String, fromId: String, toId: String, amount: Long) {
+    suspend fun recordSettlement(
+        groupId: String, fromId: String, toId: String, amount: Long,
+        method: String = "cash", txnId: String? = null, payStatus: String = "success", proofUri: String? = null,
+    ) {
         val now = System.currentTimeMillis()
         val s = SettlementEntity(
             UUID.randomUUID().toString(), groupId, fromId, toId, amount, now, now,
             me.deviceId, syncStatus = initialStatus(groupId),
+            method = method, txnId = txnId?.trim()?.ifBlank { null }, payStatus = payStatus, proofUri = proofUri,
         )
         dao.upsertSettlement(s)
         _changes.emit(LocalChange.Settlement(groupId, s.id))
+    }
+
+    /** A pending UPI payment was confirmed as received. */
+    suspend fun confirmSettlement(id: String, txnId: String? = null) {
+        val s = dao.settlement(id) ?: return
+        dao.upsertSettlement(
+            s.copy(payStatus = "success", txnId = txnId?.trim()?.ifBlank { null } ?: s.txnId,
+                updatedAt = System.currentTimeMillis(), syncStatus = initialStatus(s.groupId))
+        )
+        _changes.emit(LocalChange.Settlement(s.groupId, id))
+    }
+
+    /** Local-only trip style change. */
+    suspend fun setTheme(groupId: String, theme: String) {
+        val g = dao.group(groupId) ?: return
+        dao.upsertGroup(g.copy(theme = theme))
     }
 
     suspend fun deleteSettlement(id: String) {

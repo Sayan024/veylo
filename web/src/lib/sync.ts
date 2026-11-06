@@ -6,7 +6,8 @@ import { db } from './db'
 import { formatMoney } from './money'
 import { profile } from './profile'
 import type { SplitMethod } from './split'
-import type { Expense, Group, Member, OutboxOp, Settlement, ShareRow } from './types'
+import type { TripTheme } from './theme'
+import type { Expense, Group, Member, OutboxOp, PayMethod, PayStatus, Settlement, ShareRow } from './types'
 import { nowIso } from './utils'
 
 /**
@@ -36,8 +37,8 @@ interface ServerExpense {
   date: string; notes: string; split_method: SplitMethod; shares: { member_id: string; share: number; input: number }[]
   created_by: string; updated_by: string | null; created_at: string; updated_at: string; revision: number; deleted: boolean
 }
-interface ServerSettlement { id: string; group_id: string; from_id: string; to_id: string; amount: number; created_by: string; updated_by: string | null; created_at: string; updated_at: string; revision: number; deleted: boolean }
-interface ServerGroup { id: string; name: string; type: 'trip' | 'outing'; destination: string; currency: string; start_date: string | null; end_date: string | null; invite_code: string; created_at: string; updated_at: string }
+interface ServerSettlement { id: string; group_id: string; from_id: string; to_id: string; amount: number; created_by: string; updated_by: string | null; created_at: string; updated_at: string; revision: number; deleted: boolean; method?: PayMethod; txn_id?: string | null; pay_status?: PayStatus | 'failed' }
+interface ServerGroup { id: string; name: string; type: 'trip' | 'outing'; destination: string; currency: string; start_date: string | null; end_date: string | null; invite_code: string; created_at: string; updated_at: string; theme?: TripTheme }
 type PushResult<T> = { status: 'ok'; revision: number; updated_at: string } | { status: 'conflict'; server: T }
 
 const toServerMember = (m: Member) => ({ id: m.id, name: m.name, device_id: m.deviceId ?? null, upi_id: m.upiId ?? null, joined_at: m.joinedAt })
@@ -49,6 +50,7 @@ const toServerExpense = (e: Expense) => ({
 })
 const toServerSettlement = (s: Settlement) => ({
   id: s.id, group_id: s.groupId, from_id: s.fromId, to_id: s.toId, amount: s.amount, created_by: s.createdBy, created_at: s.createdAt, deleted: s.deleted,
+  method: s.method ?? 'cash', txn_id: s.txnId ?? null, pay_status: s.payStatus ?? 'success',
 })
 
 const fromServerMember = (m: ServerMember): Member => ({
@@ -64,6 +66,7 @@ const fromServerExpense = (e: ServerExpense, receipt?: string | null): Expense =
 const fromServerSettlement = (s: ServerSettlement): Settlement => ({
   id: s.id, groupId: s.group_id, fromId: s.from_id, toId: s.to_id, amount: Number(s.amount), createdBy: s.created_by,
   createdAt: s.created_at, updatedAt: s.updated_at, revision: s.revision, deleted: s.deleted, syncStatus: 'synced',
+  method: s.method ?? 'cash', txnId: s.txn_id ?? null, payStatus: s.pay_status === 'pending' ? 'pending' : 'success',
 })
 
 // ------------------------------------------------------------------ Push
@@ -84,7 +87,7 @@ async function pushOne(op: OutboxOp, g: Group): Promise<void> {
   if (op.kind === 'group') {
     const members = await db.members.where('groupId').equals(g.id).toArray()
     const res = await rpc<{ invite_code: string; member_token: string; now: string }>('create_group', {
-      p_group: { id: g.id, name: g.name, type: g.type, destination: g.destination, currency: g.currency, start_date: g.startDate, end_date: g.endDate },
+      p_group: { id: g.id, name: g.name, type: g.type, destination: g.destination, currency: g.currency, start_date: g.startDate, end_date: g.endDate, theme: g.theme },
       p_members: members.map(toServerMember),
       p_device: profile().deviceId,
     })
@@ -188,6 +191,8 @@ async function pullGroup(g: Group, full = false) {
     await db.groups.update(g.id, {
       name: res.group.name, destination: res.group.destination, currency: res.group.currency,
       startDate: res.group.start_date, endDate: res.group.end_date, inviteCode: res.group.invite_code,
+      // Keep a local style choice; take the server's for groups that don't have one yet (e.g. just joined).
+      theme: g.theme ?? res.group.theme,
       lastPulledAt: res.now, syncStatus: 'synced', syncError: null,
     })
 

@@ -41,7 +41,8 @@ function summarize(group: Group, members: Member[], expenses: Expense[], settlem
   const totals = memberTotals(
     liveMembers.map((m) => m.id),
     liveExpenses.map((e) => ({ payerId: e.payerId, amount: e.amount, shares: Object.fromEntries(e.shares.map((s) => [s.memberId, s.share])) })),
-    liveSettlements.map((s) => ({ fromId: s.fromId, toId: s.toId, amount: s.amount })),
+    // Pending UPI payments don't count until someone confirms them.
+    liveSettlements.filter((s) => (s.payStatus ?? 'success') === 'success').map((s) => ({ fromId: s.fromId, toId: s.toId, amount: s.amount })),
   )
   const me = members.find((m) => m.id === group.myMemberId)
   const byId = new Map(members.map((m) => [m.id, m]))

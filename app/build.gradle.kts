@@ -26,12 +26,12 @@ android {
         applicationId = "com.veylo.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", "\"${cfg("veylo.supabaseUrl")}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${cfg("veylo.supabaseAnonKey")}\"")
-        buildConfigField("String", "WEB_URL", "\"${cfg("veylo.webUrl", "https://web-tau-tan-53.vercel.app")}\"")
+        buildConfigField("String", "WEB_URL", "\"${cfg("veylo.webUrl", "https://veylo-split.vercel.app")}\"")
     }
 
     buildTypes {
@@ -76,6 +76,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
     implementation("com.google.zxing:core:3.5.3")
     implementation("io.coil-kt:coil-compose:2.7.0")
 

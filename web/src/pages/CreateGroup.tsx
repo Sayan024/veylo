@@ -1,11 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowLeft, ImagePlus, Plus, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { z } from 'zod'
-import { Avatar, Button, Card, Chip, Field, HillsArt, IconButton, Input } from '@/components/ui'
+import { Avatar, Button, Card, Chip, Field, IconButton, Input, ThemeArt } from '@/components/ui'
+import { detectTheme, THEMES, themeInfo, type TripTheme } from '@/lib/theme'
 import { createGroup } from '@/lib/data'
 import { CURRENCIES, symbol } from '@/lib/money'
 import { useProfile } from '@/lib/profile'
@@ -40,6 +41,12 @@ export function CreateGroupPage() {
   })
   const currency = watch('currency')
   const name = watch('name')
+  const destination = watch('destination')
+  const [theme, setTheme] = useState<TripTheme>(isTrip ? 'vacation' : 'cafe')
+  const [styleTouched, setStyleTouched] = useState(false)
+  useEffect(() => {
+    if (!styleTouched) setTheme(detectTheme(destination ?? '', name ?? '', !isTrip))
+  }, [destination, name, styleTouched, isTrip])
 
   const addMember = () => {
     const n = memberInput.trim()
@@ -56,7 +63,7 @@ export function CreateGroupPage() {
     setSaving(true)
     try {
       const all = memberInput.trim() ? [...members, memberInput.trim()] : members
-      const id = await createGroup({ ...v, type: isTrip ? 'trip' : 'outing', cover, members: all, endDate: isTrip ? v.endDate : null })
+      const id = await createGroup({ ...v, type: isTrip ? 'trip' : 'outing', cover, members: all, endDate: isTrip ? v.endDate : null, theme })
       toast.success(isTrip ? 'Trip created' : 'Outing started')
       nav(`/g/${id}`, { replace: true })
     } catch (e) {
@@ -68,7 +75,7 @@ export function CreateGroupPage() {
   return (
     <form onSubmit={submit} className="pb-28">
       <div className="relative h-56 cursor-pointer overflow-hidden lg:mx-8 lg:mt-8 lg:rounded-[28px]" onClick={() => fileRef.current?.click()}>
-        {cover ? <img src={cover} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <HillsArt seed={name || type || 'x'} outing={!isTrip} className="absolute inset-0 h-full w-full" />}
+        {cover ? <img src={cover} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <ThemeArt theme={theme} seed={name || type || 'x'} className="absolute inset-0 h-full w-full" />}
         <div className="absolute inset-x-0 top-0 flex p-4 pt-safe" onClick={(e) => e.stopPropagation()}>
           <IconButton icon={ArrowLeft} label="Back" dark onClick={() => nav(-1)} />
         </div>
@@ -104,6 +111,24 @@ export function CreateGroupPage() {
             </Field>
           )}
         </div>
+
+        <Field label="Trip style" hint={!styleTouched && (destination || name) ? 'Picked from what you typed — tap to change' : undefined}>
+          <div className="flex flex-wrap gap-2">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => { setTheme(t.id); setStyleTouched(true) }}
+                className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold transition"
+                style={t.id === theme ? { background: t.accent, color: '#fff' } : undefined}
+              >
+                <span className={t.id === theme ? '' : 'opacity-90'}>{t.emoji}</span>
+                <span className={t.id === theme ? '' : 'text-ink'}>{t.label}</span>
+              </button>
+            ))}
+          </div>
+          <span className="sr-only">Selected: {themeInfo(theme).label}</span>
+        </Field>
 
         <Field label="Currency">
           <div className="flex flex-wrap gap-2">

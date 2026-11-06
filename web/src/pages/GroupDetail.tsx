@@ -1,13 +1,15 @@
-import { ArrowLeft, ArrowRight, Check, CheckCheck, Copy, ImagePlus, LogOut, MoreVertical, Plus, QrCode, ReceiptText, Share2, Undo2, UserPlus, Wallet } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CheckCheck, Copy, ImagePlus, LogOut, MoreVertical, Palette, Plus, QrCode, ReceiptText, Share2, Undo2, UserPlus, Wallet } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { toast } from 'sonner'
 import { ExpenseRow } from '@/components/rows'
-import { Amount, Avatar, Button, CATEGORIES, CategoryBadge, Cover, EmptyState, Field, IconButton, Input, PageSkeleton, Segmented, Sheet, SyncBadge } from '@/components/ui'
+import { Amount, Avatar, Button, CATEGORIES, CategoryBadge, Chip, Cover, EmptyState, Field, IconButton, Input, PageSkeleton, Segmented, Sheet, SyncBadge, ThemeArt, ThemeChip } from '@/components/ui'
+import { THEMES, themeInfo, themeOf } from '@/lib/theme'
+import type { PayMethod, PayStatus } from '@/lib/types'
 import { cloudEnabled } from '@/lib/cloud'
-import { addMember, leaveGroup, recordSettlement, undoSettlement, updateGroupLocal } from '@/lib/data'
+import { addMember, confirmSettlement, leaveGroup, recordSettlement, undoSettlement, updateGroupLocal } from '@/lib/data'
 import { useAppData, useOnline, type GroupSummary } from '@/lib/hooks'
 import { formatMoney, parseMoney, plainMoney } from '@/lib/money'
 import type { Transfer } from '@/lib/settle'
@@ -26,6 +28,7 @@ export function GroupDetailPage() {
   const [adding, setAdding] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [settle, setSettle] = useState<Transfer | null>(null)
+  const [styling, setStyling] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   if (!d) return <PageSkeleton />
@@ -56,6 +59,7 @@ export function GroupDetailPage() {
           <IconButton icon={MoreVertical} label="More" dark onClick={() => setMenu(true)} />
         </div>
         <div className="absolute inset-x-0 bottom-0 p-5 pb-9 text-white lg:pb-6">
+          <div className="mb-2"><ThemeChip theme={themeOf(g.group)} onClick={() => setStyling(true)} /></div>
           <h1 className="text-3xl font-extrabold tracking-tight">{g.group.name}</h1>
           <p className="mt-1 text-xs text-white/85">{subtitle}</p>
           <div className="mt-3 flex items-center">
@@ -99,6 +103,7 @@ export function GroupDetailPage() {
             { icon: QrCode, label: 'Invite members', run: () => setInvite(true) },
             { icon: UserPlus, label: 'Add member', run: () => setAdding(true) },
             { icon: ImagePlus, label: 'Change cover photo', run: () => fileRef.current?.click() },
+            { icon: Palette, label: 'Change trip style', run: () => setStyling(true) },
             { icon: CheckCheck, label: g.group.archived ? 'Mark as active' : 'Mark as completed', run: () => updateGroupLocal(g.group.id, { archived: !g.group.archived }) },
             { icon: LogOut, label: 'Leave group on this device', run: () => setLeaving(true), danger: true },
           ].map((a) => (
@@ -121,6 +126,22 @@ export function GroupDetailPage() {
       </Sheet>
 
       <SettleSheet g={g} t={settle} onClose={() => setSettle(null)} />
+
+      <Sheet open={styling} onClose={() => setStyling(false)} title="Trip style">
+        <div className="space-y-2">
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => { void updateGroupLocal(g.group.id, { theme: t.id }); setStyling(false) }}
+              className="flex w-full items-center gap-3 rounded-2xl bg-card p-3 text-left hover:bg-cardalt"
+              style={t.id === themeOf(g.group) ? { outline: `2px solid ${t.accent}` } : undefined}
+            >
+              <ThemeArt theme={t.id} seed={g.group.id} className="h-10 w-16 shrink-0 overflow-hidden rounded-lg" />
+              <span className="font-semibold">{t.emoji} {t.label}</span>
+            </button>
+          ))}
+        </div>
+      </Sheet>
     </div>
   )
 }
@@ -137,7 +158,7 @@ function ExpensesTab({ g }: { g: GroupSummary }) {
 
   return (
     <>
-      <div className="flex items-center gap-4 rounded-[22px] bg-lime-tint p-5">
+      <div className="flex items-center gap-4 rounded-[22px] p-5" style={{ background: `${themeInfo(themeOf(g.group)).accent}1F` }}>
         <div className="flex-1">
           <p className="text-xs font-semibold text-muted">Total Spent</p>
           <Amount value={g.totalSpent} currency={g.group.currency} className="text-3xl font-extrabold tracking-tight" />
@@ -274,6 +295,16 @@ function SettleTab({ g, onSettle }: { g: GroupSummary; onSettle: (t: Transfer) =
               <CategoryBadge settlement size={38} />
               <div className="flex-1">
                 <p className="text-sm font-bold">{g.name(s.fromId)} paid {g.name(s.toId)}</p>
+                <p className="text-xs text-muted">
+                  {s.method === 'upi' ? 'UPI' : s.method === 'other' ? 'Other' : 'Cash'}
+                  {s.txnId && <> · Txn …{s.txnId.slice(-6)}</>}
+                </p>
+                {s.payStatus === 'pending' && (
+                  <p className="mt-1 flex items-center gap-2">
+                    <span className="rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-bold text-warn">Pending</span>
+                    <button onClick={() => confirmSettlement(s.id).then(() => toast.success('Marked as received'))} className="text-xs font-bold text-forest underline-offset-2 hover:underline dark:text-lime">Mark received</button>
+                  </p>
+                )}
                 <p className="flex items-center gap-1.5 text-xs text-muted">{fmtDate(s.createdAt)} <SyncBadge status={s.syncStatus} compact /></p>
               </div>
               <Amount value={s.amount} currency={c} className="text-sm font-bold text-owed" />
@@ -290,22 +321,48 @@ function SettleTab({ g, onSettle }: { g: GroupSummary; onSettle: (t: Transfer) =
 
 function SettleSheet({ g, t, onClose }: { g: GroupSummary; t: Transfer | null; onClose: () => void }) {
   const [text, setText] = useState('')
-  useEffect(() => setText(t ? plainMoney(t.amount) : ''), [t])
+  const [method, setMethod] = useState<PayMethod>('cash')
+  const [txnId, setTxnId] = useState('')
+  const [status, setStatus] = useState<PayStatus>('success')
+  useEffect(() => {
+    setText(t ? plainMoney(t.amount) : '')
+    setMethod('cash'); setTxnId(''); setStatus('success')
+  }, [t])
   const amount = parseMoney(text)
   const tooMuch = !!t && amount != null && amount > t.amount
   return (
     <Sheet open={!!t} onClose={onClose} title="Record payment">
       {t && (
         <div className="space-y-4">
-          <p className="font-semibold">{g.name(t.fromId)} paid {g.name(t.toId)}</p>
+          <p className="font-semibold">{g.name(t.fromId)} → {g.name(t.toId)}</p>
+          <Field label="Paid with">
+            <div className="flex gap-2">
+              {(['upi', 'cash', 'other'] as PayMethod[]).map((m) => (
+                <Chip key={m} active={method === m} onClick={() => setMethod(m)}>{m === 'upi' ? 'UPI' : m === 'cash' ? 'Cash' : 'Other'}</Chip>
+              ))}
+            </div>
+          </Field>
           <Field label="Amount" error={tooMuch ? `More than the ${formatMoney(t.amount, g.group.currency)} owed` : undefined}>
             <Input inputMode="decimal" prefix={formatMoney(0, g.group.currency).replace(/[\d.,]/g, '')} value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
+          {method === 'upi' && (
+            <>
+              <Field label="UPI transaction ID / UTR (optional)" hint="Find it in your UPI app's payment details (usually 12 digits).">
+                <Input value={txnId} onChange={(e) => setTxnId(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 35))} placeholder="431298765432" />
+              </Field>
+              <Field label="Status" hint={status === 'pending' ? "Pending payments don't change balances until someone taps Mark received." : undefined}>
+                <div className="flex gap-2">
+                  <Chip active={status === 'success'} onClick={() => setStatus('success')}>✓ Paid</Chip>
+                  <Chip active={status === 'pending'} onClick={() => setStatus('pending')}>⏳ Pending</Chip>
+                </div>
+              </Field>
+            </>
+          )}
           <Button className="w-full" icon={Check} disabled={!amount || amount <= 0 || tooMuch} onClick={async () => {
-            await recordSettlement(g.group.id, t.fromId, t.toId, amount!)
-            toast.success('Marked as settled')
+            await recordSettlement(g.group.id, t.fromId, t.toId, amount!, method === 'upi' ? { method, txnId, payStatus: status } : { method })
+            toast.success(status === 'pending' && method === 'upi' ? 'Saved as pending' : 'Marked as settled')
             onClose()
-          }}>Mark as settled</Button>
+          }}>{status === 'pending' && method === 'upi' ? 'Save as pending' : 'Mark as settled'}</Button>
         </div>
       )}
     </Sheet>

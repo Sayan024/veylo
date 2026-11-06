@@ -380,7 +380,7 @@ fun GroupCover(group: GroupEntity, modifier: Modifier = Modifier) {
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
             )
         } else {
-            MountainArt(group.id, Modifier.fillMaxSize(), outing = group.type == GroupType.OUTING)
+            TripArt(com.veylo.app.domain.TripTheme.of(group.theme), group.id, Modifier.fillMaxSize())
         }
     }
 }

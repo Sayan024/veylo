@@ -1,4 +1,5 @@
 import type { SplitMethod } from './split'
+import type { TripTheme } from './theme'
 
 /** local = only on this device · pending = queued · syncing = sent · synced = accepted by server · failed = rejected */
 export type SyncStatus = 'local' | 'pending' | 'syncing' | 'synced' | 'failed'
@@ -26,6 +27,8 @@ export interface Group {
   lastPulledAt?: string | null
   syncStatus: SyncStatus
   syncError?: string | null
+  /** Trip style (cover art + colours). Missing on groups saved before styles existed. */
+  theme?: TripTheme
 }
 
 export interface Member {
@@ -73,12 +76,20 @@ export interface Expense {
   syncError?: string | null
 }
 
+export type PayMethod = 'cash' | 'upi' | 'other'
+export type PayStatus = 'success' | 'pending'
+
 export interface Settlement {
   id: string
   groupId: string
   fromId: string
   toId: string
   amount: number
+  method?: PayMethod
+  /** UPI transaction / bank reference (UTR). */
+  txnId?: string | null
+  /** Only successful payments count towards balances. */
+  payStatus?: PayStatus
   createdBy: string
   createdAt: string
   updatedAt: string

@@ -278,6 +278,7 @@ class CloudSync(
                         put("id", g.id); put("name", g.name); put("type", g.type.lowercase())
                         put("destination", g.destination); put("currency", g.currency)
                         put("start_date", g.startDate?.let { isoDate(it) }); put("end_date", g.endDate?.let { isoDate(it) })
+                        put("theme", g.theme)
                     })
                     put("p_members", buildJsonArray { members.forEach { add(memberJson(it)) } })
                     put("p_device", me.deviceId)
@@ -351,6 +352,8 @@ class CloudSync(
                     startDate = sg.str("start_date")?.let { dateMillis(it) },
                     endDate = sg.str("end_date")?.let { dateMillis(it) },
                     joinCode = sg.str("invite_code") ?: cur.joinCode,
+                    // Take the server's style only for a group we just joined; keep local choices otherwise.
+                    theme = if (cur.name == "…") sg.str("theme") ?: cur.theme else cur.theme,
                     lastPulledAt = r.str("now"),
                 )
             )
@@ -422,6 +425,8 @@ class CloudSync(
                 createdByDevice = local?.createdByDevice ?: "cloud",
                 deleted = o["deleted"]?.jsonPrimitive?.booleanOrNull ?: false,
                 syncStatus = SyncStatus.SYNCED, revision = rev,
+                method = o.str("method") ?: "cash", txnId = o.str("txn_id"), payStatus = o.str("pay_status") ?: "success",
+                proofUri = local?.proofUri,
             )
         )
     }
@@ -448,6 +453,7 @@ class CloudSync(
         put("id", s.id); put("group_id", s.groupId); put("from_id", s.fromId); put("to_id", s.toId)
         put("amount", s.amount); put("created_by", myMemberId(g)); put("created_at", Instant.ofEpochMilli(s.createdAt).toString())
         put("deleted", s.deleted)
+        put("method", s.method); put("txn_id", s.txnId); put("pay_status", s.payStatus)
     }
 
     private suspend fun myMemberId(g: GroupEntity): String? =

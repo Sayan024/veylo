@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { decimalString, formatMoney, parseMoney, plainMoney } from './money'
 import { calculateSplit, distribute } from './split'
 import { balances, memberTotals, minimizeTransfers } from './settle'
+import { detectTheme } from './theme'
+
+describe('trip style', () => {
+  it('detects from destination like the Android app', () => {
+    expect(detectTheme('Darjeeling, West Bengal', 'Trip', false)).toBe('hills')
+    expect(detectTheme('Goa', 'Friends', false)).toBe('beach')
+    expect(detectTheme('Goa', 'Sales conference', false)).toBe('business')
+    expect(detectTheme('Seattle', '', false)).toBe('vacation')
+    expect(detectTheme('Blue Tokai', 'Weekend', true)).toBe('cafe')
+  })
+})
 
 const ok = (r: ReturnType<typeof calculateSplit>) => {
   if (!r.ok) throw new Error(r.error)

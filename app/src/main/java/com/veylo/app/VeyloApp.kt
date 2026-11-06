@@ -27,7 +27,7 @@ class VeyloApp : Application() {
 class AppContainer(context: Context) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val db: VeyloDatabase = Room.databaseBuilder(context, VeyloDatabase::class.java, "veylo.db")
-        .addMigrations(VeyloDatabase.MIGRATION_1_2)
+        .addMigrations(VeyloDatabase.MIGRATION_1_2, VeyloDatabase.MIGRATION_2_3)
         .build()
     val profiles = ProfileStore(context)
     val repository = VeyloRepository(context, db.dao(), profiles)

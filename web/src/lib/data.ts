@@ -4,7 +4,8 @@ import { db } from './db'
 import { formatMoney } from './money'
 import { profile } from './profile'
 import type { SplitMethod } from './split'
-import type { Activity, ActivityKind, Expense, Group, GroupType, Member, OutboxKind, Settlement, ShareRow, SyncStatus } from './types'
+import type { TripTheme } from './theme'
+import type { Activity, ActivityKind, Expense, Group, GroupType, Member, OutboxKind, PayMethod, PayStatus, Settlement, ShareRow, SyncStatus } from './types'
 import { nowIso, uid } from './utils'
 
 /** Tells the sync engine something changed locally. */
@@ -41,6 +42,7 @@ export interface NewGroup {
   startDate?: string | null
   endDate?: string | null
   members: string[]
+  theme: TripTheme
 }
 
 export async function createGroup(input: NewGroup): Promise<string> {
@@ -52,6 +54,7 @@ export async function createGroup(input: NewGroup): Promise<string> {
     id, name: input.name.trim(), type: input.type, destination: input.destination.trim(), currency: input.currency,
     cover: input.cover ?? null, startDate: input.startDate || null, endDate: input.endDate || null,
     archived: false, createdAt: now, updatedAt: now, shared: false, myMemberId: meId, syncStatus: initialStatus(),
+    theme: input.theme,
   }
   const names = [...new Set(input.members.map((m) => m.trim()).filter(Boolean))].filter(
     (n) => n.toLowerCase() !== p.name.trim().toLowerCase(),
@@ -73,8 +76,8 @@ export async function createGroup(input: NewGroup): Promise<string> {
   return id
 }
 
-/** Local-only fields (cover photo, archived). */
-export async function updateGroupLocal(id: string, patch: Partial<Pick<Group, 'cover' | 'archived'>>) {
+/** Local-only fields (cover photo, archived, style). */
+export async function updateGroupLocal(id: string, patch: Partial<Pick<Group, 'cover' | 'archived' | 'theme'>>) {
   await db.groups.update(id, patch)
 }
 
@@ -168,13 +171,17 @@ export async function deleteExpense(id: string) {
 
 // ------------------------------------------------------------------ Settlements
 
-export async function recordSettlement(groupId: string, fromId: string, toId: string, amount: number) {
+export async function recordSettlement(
+  groupId: string, fromId: string, toId: string, amount: number,
+  pay: { method?: PayMethod; txnId?: string | null; payStatus?: PayStatus } = {},
+) {
   const g = await db.groups.get(groupId)
   if (!g || amount <= 0 || fromId === toId) return
   const now = nowIso()
   const s: Settlement = {
     id: uid(), groupId, fromId, toId, amount, createdBy: g.myMemberId, createdAt: now, updatedAt: now,
     revision: 0, deleted: false, syncStatus: initialStatus(),
+    method: pay.method ?? 'cash', txnId: pay.txnId?.trim() || null, payStatus: pay.payStatus ?? 'success',
   }
   const [from, to] = await Promise.all([db.members.get(fromId), db.members.get(toId)])
   const actor = await myName(groupId)
@@ -183,6 +190,15 @@ export async function recordSettlement(groupId: string, fromId: string, toId: st
     await log(groupId, 'settlement', `${from?.name} paid ${to?.name}`, formatMoney(amount, g.currency), amount, s.id, actor)
     await enqueue(groupId, 'settlement', s.id, 0)
   })
+  notifyChange()
+}
+
+/** A pending payment was received. */
+export async function confirmSettlement(id: string) {
+  const s = await db.settlements.get(id)
+  if (!s) return
+  await db.settlements.update(id, { payStatus: 'success', updatedAt: nowIso(), syncStatus: initialStatus() })
+  await enqueue(s.groupId, 'settlement', id, s.revision)
   notifyChange()
 }
 

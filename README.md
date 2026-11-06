@@ -78,3 +78,20 @@ app/src/main/java/com/veylo/app/
 - Totals on the home screen use the most common currency across your groups. There is no currency conversion.
 - Dependency injection is done by hand (`AppContainer`) instead of with Hilt, to keep the build small.
 - Expense edit history only shows when the expense was last updated. Older versions are not kept.
+
+## Online sync (optional)
+
+The APK can also sync over the internet, using the same groups as the web app. Add these lines to `local.properties` (it isn't uploaded to GitHub) and rebuild:
+
+```
+veylo.supabaseUrl=https://YOUR-PROJECT.supabase.co
+veylo.supabaseAnonKey=eyJ...            # public anon key only, never service_role
+veylo.webUrl=https://veylo-split.vercel.app
+```
+
+Run `web/supabase/schema.sql` once in your Supabase project. If the database already existed before trip styles and payment details were added, also run `web/supabase/migrations/002_themes_payments.sql`.
+
+## Trip styles and payment checks (v0.3.0)
+
+- **Trip styles:** Hill station, Beach, Business, Vacation, or Café & outing. The style is picked from the destination you type (Manali → hills, Goa → beach, "client meeting" → business), and you can change it any time. It sets the cover art and the trip's colours.
+- **UPI payment check:** after you tap "Pay via UPI", VEYLO reads the result your UPI app sends back (Paid / Pending / Failed, plus the transaction ID). Many apps, Google Pay especially, don't send that back, so you can also tap **Read from payment screenshot**. It reads the transaction ID, amount and status on the phone; nothing is uploaded. Pending payments don't change balances until someone taps **Mark received**.

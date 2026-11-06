@@ -37,7 +37,7 @@
         <!-- Pre-download the Google QR scanner UI module -->
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"
-            android:value="barcode_ui" />
+            android:value="barcode_ui,ocr" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -108,7 +108,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val balances = SettlementCalculator.balances(
                 gm.map { it.id },
                 ge.map { e -> LedgerExpense(e.payerId, e.amount, splitsByExpense[e.id].orEmpty().associate { it.memberId to it.share }) },
-                gs.map { LedgerPayment(it.fromId, it.toId, it.amount) },
+                // Pending UPI payments don't count until confirmed.
+                gs.filter { it.payStatus == "success" }.map { LedgerPayment(it.fromId, it.toId, it.amount) },
             )
             GroupSummary(
                 group = g, members = gm, expenses = ge,
@@ -143,10 +144,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun createGroup(
         name: String, type: String, destination: String, currency: String, cover: Uri?,
-        start: Long?, end: Long?, members: List<String>, onDone: (String) -> Unit,
+        start: Long?, end: Long?, members: List<String>, theme: String, onDone: (String) -> Unit,
     ) = viewModelScope.launch {
         val coverUri = cover?.let { repo.importImage(it) }
-        val id = repo.createGroup(name, type, destination, currency, coverUri, start, end, members)
+        val id = repo.createGroup(name, type, destination, currency, coverUri, start, end, members, theme)
         onDone(id)
     }
 
@@ -174,8 +175,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteExpense(id: String) = viewModelScope.launch { repo.deleteExpense(id) }
 
-    fun settle(groupId: String, from: String, to: String, amount: Long) =
-        viewModelScope.launch { repo.recordSettlement(groupId, from, to, amount) }
+    fun settle(
+        groupId: String, from: String, to: String, amount: Long,
+        method: String = "cash", txnId: String? = null, payStatus: String = "success", proof: Uri? = null,
+    ) = viewModelScope.launch {
+        val proofUri = proof?.let { repo.importImage(it) }
+        repo.recordSettlement(groupId, from, to, amount, method, txnId, payStatus, proofUri)
+    }
+
+    fun confirmSettlement(id: String) = viewModelScope.launch { repo.confirmSettlement(id) }
+    fun setTheme(groupId: String, theme: String) = viewModelScope.launch { repo.setTheme(groupId, theme) }
 
     fun deleteSettlement(id: String) = viewModelScope.launch { repo.deleteSettlement(id) }
 

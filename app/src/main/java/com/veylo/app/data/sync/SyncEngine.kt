@@ -371,7 +371,7 @@ class SyncEngine(
         dao.allExpensesOf(gid).forEach { e ->
             sendTracked(ep, e.id, ExpenseMsg(e.copy(receiptUri = null), dao.splitsOf(e.id)))
         }
-        dao.allSettlementsOf(gid).forEach { s -> sendTracked(ep, s.id, SettlementMsg(s)) }
+        dao.allSettlementsOf(gid).forEach { s -> sendTracked(ep, s.id, SettlementMsg(s.copy(proofUri = null))) }
         send(ep, Welcome(gid, member.id))
 
         relay(ep) { send(it, MemberMsg(member)) }
@@ -414,13 +414,13 @@ class SyncEngine(
         val local = dao.settlement(s.id)
         if (local != null && local.updatedAt > s.updatedAt) {
             send(ep, Ack(s.id, s.updatedAt))
-            if (isHost) sendTracked(ep, local.id, SettlementMsg(local))
+            if (isHost) sendTracked(ep, local.id, SettlementMsg(local.copy(proofUri = null)))
             return
         }
-        dao.upsertSettlement(s.copy(syncStatus = SyncStatus.SYNCED))
+        dao.upsertSettlement(s.copy(syncStatus = SyncStatus.SYNCED, proofUri = local?.proofUri))
         onReceived("settlement", s.groupId, s.id)
         send(ep, Ack(s.id, s.updatedAt))
-        if (isHost) relay(ep) { sendTracked(it, s.id, SettlementMsg(s)) }
+        if (isHost) relay(ep) { sendTracked(it, s.id, SettlementMsg(s.copy(proofUri = null))) }
     }
 
     private suspend fun validateExpense(msg: ExpenseMsg): String? {
@@ -468,7 +468,7 @@ class SyncEngine(
             is LocalChange.Expense -> dao.expense(c.id)?.let {
                 sendTracked(ep, it.id, ExpenseMsg(it.copy(receiptUri = null), dao.splitsOf(it.id)))
             }
-            is LocalChange.Settlement -> dao.settlement(c.id)?.let { sendTracked(ep, it.id, SettlementMsg(it)) }
+            is LocalChange.Settlement -> dao.settlement(c.id)?.let { sendTracked(ep, it.id, SettlementMsg(it.copy(proofUri = null))) }
             is LocalChange.Member -> dao.member(c.id)?.let { send(ep, MemberMsg(it)) }
         }
     }
@@ -477,7 +477,7 @@ class SyncEngine(
         dao.unsyncedExpenses(groupId).forEach {
             sendTracked(ep, it.id, ExpenseMsg(it.copy(receiptUri = null), dao.splitsOf(it.id)))
         }
-        dao.unsyncedSettlements(groupId).forEach { sendTracked(ep, it.id, SettlementMsg(it)) }
+        dao.unsyncedSettlements(groupId).forEach { sendTracked(ep, it.id, SettlementMsg(it.copy(proofUri = null))) }
     }
 
     private suspend fun onPeerGone(ep: String) {

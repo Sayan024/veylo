@@ -71,6 +71,10 @@ import com.veylo.app.ui.components.formatDate
 import com.veylo.app.ui.navigation.Nav
 import com.veylo.app.ui.theme.Palette
 import com.veylo.app.ui.theme.Veylo
+import com.veylo.app.domain.TripTheme
+import com.veylo.app.ui.components.TripArt
+import com.veylo.app.ui.components.accent
+import androidx.compose.runtime.LaunchedEffect
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -80,6 +84,8 @@ fun CreateGroupScreen(vm: AppViewModel, nav: Nav, type: String) {
     var name by rememberSaveable { mutableStateOf("") }
     var destination by rememberSaveable { mutableStateOf("") }
     var currency by rememberSaveable { mutableStateOf("INR") }
+    var theme by rememberSaveable { mutableStateOf(if (isTrip) TripTheme.VACATION else TripTheme.CAFE) }
+    var styleTouched by rememberSaveable { mutableStateOf(false) }
     var cover by remember { mutableStateOf<Uri?>(null) }
     var start by rememberSaveable { mutableStateOf<Long?>(null) }
     var end by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -90,6 +96,9 @@ fun CreateGroupScreen(vm: AppViewModel, nav: Nav, type: String) {
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) cover = uri }
     com.veylo.app.ui.components.DarkHeaderStatusBar()
+    LaunchedEffect(destination, name) {
+        if (!styleTouched) theme = TripTheme.detect(destination, name, !isTrip)
+    }
 
     fun addMember() {
         val n = memberInput.trim()
@@ -106,7 +115,7 @@ fun CreateGroupScreen(vm: AppViewModel, nav: Nav, type: String) {
                 if (cover != null) {
                     AsyncImage(cover, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else {
-                    MountainArt(name.ifBlank { type }, Modifier.fillMaxSize(), outing = !isTrip)
+                    TripArt(theme, name.ifBlank { type }, Modifier.fillMaxSize())
                 }
                 Row(Modifier.statusBarsPadding().padding(16.dp)) {
                     IconCircle(Icons.AutoMirrored.Rounded.ArrowBack, { nav.back() }, bg = Color(0x66000000), tint = Color.White)
@@ -150,6 +159,30 @@ fun CreateGroupScreen(vm: AppViewModel, nav: Nav, type: String) {
                                 if (start != null) "${formatDate(start!!)}  →  ${end?.let { formatDate(it) } ?: "…"}" else "Select start & end date",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = if (start != null) MaterialTheme.colorScheme.onSurface else Veylo.colors.muted,
+                            )
+                        }
+                    }
+                }
+
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Trip style", style = MaterialTheme.typography.labelMedium, color = Veylo.colors.muted, modifier = Modifier.weight(1f))
+                        if (!styleTouched && (destination.isNotBlank() || name.isNotBlank())) {
+                            Text("Auto-detected", style = MaterialTheme.typography.labelSmall, color = theme.accent())
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TripTheme.entries.forEach { t ->
+                            val sel = t == theme
+                            Text(
+                                "${t.emoji}  ${t.label}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (sel) Color.White else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.clip(RoundedCornerShape(50))
+                                    .background(if (sel) t.accent() else Veylo.colors.card)
+                                    .clickable { theme = t; styleTouched = true }
+                                    .padding(horizontal = 14.dp, vertical = 9.dp),
                             )
                         }
                     }
@@ -206,7 +239,7 @@ fun CreateGroupScreen(vm: AppViewModel, nav: Nav, type: String) {
                 onClick = {
                     if (memberInput.isNotBlank()) addMember()
                     saving = true
-                    vm.createGroup(name, type, destination, currency, cover, start, end, members.toList()) { id ->
+                    vm.createGroup(name, type, destination, currency, cover, start, end, members.toList(), theme.key) { id ->
                         nav.groupReplacing(id)
                     }
                 },

@@ -84,6 +84,10 @@ import com.veylo.app.ui.components.formatDate
 import com.veylo.app.ui.navigation.Nav
 import com.veylo.app.ui.theme.Palette
 import com.veylo.app.ui.theme.Veylo
+import com.veylo.app.domain.TripTheme
+import com.veylo.app.ui.components.ThemeChip
+import com.veylo.app.ui.components.TripArt
+import com.veylo.app.ui.components.accent
 
 @Composable
 fun GroupDetailScreen(vm: AppViewModel, nav: Nav, groupId: String) {
@@ -106,7 +110,19 @@ fun GroupDetailScreen(vm: AppViewModel, nav: Nav, groupId: String) {
     var addMember by remember { mutableStateOf(false) }
     var confirmLeave by remember { mutableStateOf(false) }
     var settleTarget by remember { mutableStateOf<Transfer?>(null) }
+    var payingUpi by remember { mutableStateOf<Transfer?>(null) }
+    var upiResult by remember { mutableStateOf<com.veylo.app.domain.PaymentInfo?>(null) }
+    var fromUpi by remember { mutableStateOf(false) }
+    var stylePicker by remember { mutableStateOf(false) }
+    val theme = TripTheme.of(g.group.theme)
     val ctx = LocalContext.current
+    val upiLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        // Whatever the UPI app says (or doesn't), let the user confirm what happened.
+        upiResult = upiResultFrom(res.data)
+        fromUpi = true
+        settleTarget = payingUpi
+        payingUpi = null
+    }
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) vm.changeCover(groupId, uri)
     }
@@ -132,6 +148,8 @@ fun GroupDetailScreen(vm: AppViewModel, nav: Nav, groupId: String) {
                             DropdownMenu(menu, { menu = false }) {
                                 DropdownMenuItem({ Text("Nearby sync & invite") }, { menu = false; showSync = true }, leadingIcon = { Icon(Icons.Rounded.Bluetooth, null) })
                                 DropdownMenuItem({ Text("Add member") }, { menu = false; addMember = true }, leadingIcon = { Icon(Icons.Rounded.Add, null) })
+                                DropdownMenuItem({ Text("Change trip style") }, { menu = false; stylePicker = true },
+                                    leadingIcon = { Text(theme.emoji) })
                                 DropdownMenuItem({ Text("Change cover") }, {
                                     menu = false
                                     coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -142,6 +160,8 @@ fun GroupDetailScreen(vm: AppViewModel, nav: Nav, groupId: String) {
                         }
                     }
                     Column(Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 20.dp, bottom = 46.dp)) {
+                        ThemeChip(theme, Modifier.clickable { stylePicker = true })
+                        Spacer(Modifier.height(8.dp))
                         Text(g.group.name, style = MaterialTheme.typography.headlineLarge, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(4.dp))
                         Row(
@@ -199,12 +219,20 @@ fun GroupDetailScreen(vm: AppViewModel, nav: Nav, groupId: String) {
                 )
             }
             when (tab) {
-                0 -> expensesTab(g, nav)
+                0 -> expensesTab(g, nav, theme)
                 1 -> balancesTab(g)
-                else -> settleTab(g, onSettle = { settleTarget = it }, onPay = { t ->
+                else -> settleTab(g, onSettle = { fromUpi = false; upiResult = null; settleTarget = it }, onPay = { t ->
                     val to = g.member(t.toId)
-                    if (to?.upiId != null) launchUpi(ctx, to.upiId, to.name, t.amount, "VEYLO · ${g.group.name}")
-                }, onUndo = { vm.deleteSettlement(it) })
+                    if (to?.upiId != null) {
+                        payingUpi = t
+                        try {
+                            upiLauncher.launch(upiIntent(to.upiId, to.name, t.amount, "VEYLO · ${g.group.name}", "VEYLO${System.currentTimeMillis()}"))
+                        } catch (e: android.content.ActivityNotFoundException) {
+                            payingUpi = null
+                            android.widget.Toast.makeText(ctx, "No UPI app found on this phone", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }, onUndo = { vm.deleteSettlement(it) }, onConfirm = { vm.confirmSettlement(it) })
             }
         }
 
@@ -244,35 +272,40 @@ fun GroupDetailScreen(vm: AppViewModel, nav: Nav, groupId: String) {
     }
 
     settleTarget?.let { t ->
-        var amount by remember(t) { mutableStateOf(Money.plain(t.amount)) }
-        val parsed = Money.parse(amount)
+        PaymentSheet(vm, g, t, upiResult, fromUpi) { settleTarget = null; upiResult = null; fromUpi = false }
+    }
+
+    if (stylePicker) {
         AlertDialog(
-            onDismissRequest = { settleTarget = null },
-            title = { Text("Record payment") },
+            onDismissRequest = { stylePicker = false },
+            title = { Text("Trip style") },
             text = {
-                Column {
-                    Text("${g.name(t.fromId)} paid ${g.name(t.toId)}", style = MaterialTheme.typography.bodyLarge)
-                    Spacer(Modifier.height(12.dp))
-                    VTextField(amount, { amount = it }, "Amount", prefix = Money.symbol(g.currency),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TripTheme.entries.forEach { t ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                .background(if (t == theme) t.accent().copy(alpha = 0.16f) else Veylo.colors.cardAlt)
+                                .clickable { vm.setTheme(groupId, t.key); stylePicker = false }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(44.dp, 30.dp).clip(RoundedCornerShape(8.dp))) { TripArt(t, g.group.id, Modifier.fillMaxSize()) }
+                            Spacer(Modifier.width(12.dp))
+                            Text("${t.emoji}  ${t.label}", style = MaterialTheme.typography.bodyLarge, color = if (t == theme) t.accent() else MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
                 }
             },
-            confirmButton = {
-                TextButton({
-                    if (parsed != null && parsed > 0) vm.settle(groupId, t.fromId, t.toId, parsed)
-                    settleTarget = null
-                }, enabled = parsed != null && parsed > 0) { Text("Mark as settled") }
-            },
-            dismissButton = { TextButton({ settleTarget = null }) { Text("Cancel") } },
+            confirmButton = { TextButton({ stylePicker = false }) { Text("Close") } },
         )
     }
 }
 
 // ---------------------------------------------------------------- Expenses
 
-private fun androidx.compose.foundation.lazy.LazyListScope.expensesTab(g: GroupSummary, nav: Nav) {
+private fun androidx.compose.foundation.lazy.LazyListScope.expensesTab(g: GroupSummary, nav: Nav, theme: TripTheme) {
     item {
-        VCard(Modifier.padding(horizontal = 20.dp).fillMaxWidth(), color = Veylo.colors.limeTint) {
+        VCard(Modifier.padding(horizontal = 20.dp).fillMaxWidth(), color = theme.accent().copy(alpha = 0.13f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Total Spent", style = MaterialTheme.typography.labelMedium, color = Veylo.colors.muted)
@@ -282,8 +315,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.expensesTab(g: GroupS
                         Text("Your share ${Money.format(myShare, g.currency)}", style = MaterialTheme.typography.bodySmall, color = Veylo.colors.muted)
                     }
                 }
-                Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(Palette.Lime), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.BarChart, null, tint = Palette.ForestDeep)
+                Box(Modifier.size(46.dp).clip(RoundedCornerShape(14.dp)).background(theme.accent()), contentAlignment = Alignment.Center) {
+                    Text(theme.emoji, style = MaterialTheme.typography.titleLarge)
                 }
             }
         }
@@ -369,6 +402,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.settleTab(
     onSettle: (Transfer) -> Unit,
     onPay: (Transfer) -> Unit,
     onUndo: (String) -> Unit,
+    onConfirm: (String) -> Unit,
 ) {
     item {
         VCard(Modifier.padding(horizontal = 20.dp).fillMaxWidth(), color = Veylo.colors.limeTint) {
@@ -433,6 +467,24 @@ private fun androidx.compose.foundation.lazy.LazyListScope.settleTab(
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text("${g.name(s.fromId)} paid ${g.name(s.toId)}", style = MaterialTheme.typography.titleSmall)
+                    val how = buildString {
+                        append(when (s.method) { "upi" -> "UPI"; "other" -> "Other"; else -> "Cash" })
+                        s.txnId?.let { append(" · Txn ${if (it.length > 8) "…" + it.takeLast(6) else it}") }
+                    }
+                    Text(how, style = MaterialTheme.typography.bodySmall, color = Veylo.colors.muted)
+                    if (s.payStatus == "pending") {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                            Text(
+                                "Pending", style = MaterialTheme.typography.labelSmall, color = Veylo.colors.warn,
+                                modifier = Modifier.clip(RoundedCornerShape(50)).background(Veylo.colors.warn.copy(alpha = 0.14f)).padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Mark received", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.clip(RoundedCornerShape(50)).clickable { onConfirm(s.id) }.padding(horizontal = 6.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(formatDate(s.createdAt), style = MaterialTheme.typography.bodySmall, color = Veylo.colors.muted)
                         Spacer(Modifier.width(6.dp))

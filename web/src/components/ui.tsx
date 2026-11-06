@@ -6,6 +6,7 @@ import { forwardRef, useEffect, type ButtonHTMLAttributes, type InputHTMLAttribu
 import { createPortal } from 'react-dom'
 import { formatMoney } from '@/lib/money'
 import type { Group, SyncStatus } from '@/lib/types'
+import { themeInfo, themeOf, type TripTheme } from '@/lib/theme'
 import { avatarColor, cn, haptic, hash, initials } from '@/lib/utils'
 
 // ------------------------------------------------------------------ Button
@@ -255,11 +256,103 @@ export function HillsArt({ seed, outing, className }: { seed: string; outing?: b
   )
 }
 
-export function Cover({ group, className }: { group: Pick<Group, 'id' | 'cover' | 'type'>; className?: string }) {
+/** Cover illustration per trip style — same scenes as the Android app. */
+export function ThemeArt({ theme, seed, className }: { theme: TripTheme; seed: string; className?: string }) {
+  if (theme === 'hills') return <HillsArt seed={seed} className={className} />
+  if (theme === 'cafe') return <HillsArt seed={seed} outing className={className} />
+  const h = hash(seed)
+  const W = 400, H = 240
+  if (theme === 'beach') {
+    const sunX = W * (0.28 + (h % 20) / 100)
+    const wave = (y: number) => {
+      let d = `M0 ${y}`
+      for (let x = 0; x < W; x += W / 6) d += ` Q${x + W / 12} ${y - 6} ${x + W / 6} ${y}`
+      return `${d} L${W} ${H} L0 ${H} Z`
+    }
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className={className}>
+        <defs><linearGradient id={`b${h}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#8ED8E8" /><stop offset="1" stopColor="#DDF4F2" /></linearGradient></defs>
+        <rect width={W} height={H} fill={`url(#b${h})`} />
+        <circle cx={sunX} cy={H * 0.3} r={H * 0.11} fill="#FFE08A" />
+        <rect y={H * 0.52} width={W} height={H * 0.48} fill="#1BA8B5" />
+        <path d={wave(H * 0.6)} fill="#34C3C9" />
+        <path d={wave(H * 0.68)} fill="#7FDAD6" />
+        <path d={`M0 ${H * 0.8} Q${W / 2} ${H * 0.7} ${W} ${H * 0.84} L${W} ${H} L0 ${H} Z`} fill="#F2D7A6" />
+        <path d={`M${W * 0.8} ${H * 0.86} Q${W * 0.75} ${H * 0.55} ${W * 0.785} ${H * 0.3}`} stroke="#7A5230" strokeWidth={W * 0.022} fill="none" strokeLinecap="round" />
+        {[-160, -120, -60, -20, 20].map((a) => {
+          const r = (a * Math.PI) / 180, x0 = W * 0.785, y0 = H * 0.3, len = W * 0.13
+          const x1 = x0 + len * Math.cos(r), y1 = y0 + len * Math.sin(r) + H * 0.06
+          return <path key={a} d={`M${x0} ${y0} Q${(x0 + x1) / 2} ${y0 - H * 0.06} ${x1} ${y1}`} stroke="#2F8F4E" strokeWidth={W * 0.018} fill="none" strokeLinecap="round" />
+        })}
+      </svg>
+    )
+  }
+  if (theme === 'business') {
+    const ground = H * 0.92
+    const blocks: JSX.Element[] = []
+    let x = -W * 0.02
+    for (let i = 0; x < W; i++) {
+      const bw = W * (0.07 + ((h >> (i % 16)) & 7) / 100)
+      const bh = H * (0.28 + ((h >> ((i * 3) % 18)) & 31) / 64)
+      blocks.push(<rect key={`b${i}`} x={x} y={ground - bh} width={bw} height={bh} fill={i % 2 ? '#263763' : '#1E2B4D'} />)
+      const rows = Math.max(1, Math.floor(bh / (H * 0.07)))
+      for (let r = 0; r < rows; r++) for (let c = 0; c < 3; c++) {
+        if (((h >> ((r + c + i) % 20)) & 3) === 0) continue
+        blocks.push(<rect key={`w${i}-${r}-${c}`} x={x + bw * (0.15 + c * 0.27)} y={ground - bh + H * 0.03 + r * H * 0.07} width={bw * 0.16} height={H * 0.03} fill="#FFE9A8" opacity={0.85} />)
+      }
+      x += bw + W * 0.008
+    }
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className={className}>
+        <defs><linearGradient id={`c${h}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2C3E6B" /><stop offset="0.55" stopColor="#6E7FB0" /><stop offset="1" stopColor="#C9CFE6" /></linearGradient></defs>
+        <rect width={W} height={H} fill={`url(#c${h})`} />
+        {blocks}
+        <rect y={ground} width={W} height={H - ground} fill="#162040" />
+      </svg>
+    )
+  }
+  // vacation: sunset over water
+  const horizon = H * 0.62, sunX = W * (0.45 + (h % 20) / 100)
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className={className}>
+      <defs>
+        <linearGradient id={`s${h}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FF9A62" /><stop offset="0.5" stopColor="#FFC37A" /><stop offset="1" stopColor="#FFE3B0" /></linearGradient>
+        <linearGradient id={`w${h}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#E5704A" /><stop offset="1" stopColor="#9C3F5C" /></linearGradient>
+      </defs>
+      <rect width={W} height={H} fill={`url(#s${h})`} />
+      <circle cx={sunX} cy={horizon} r={H * 0.16} fill="#FFF1C9" />
+      <rect y={horizon} width={W} height={H - horizon} fill={`url(#w${h})`} />
+      {[0, 1, 2, 3, 4].map((k) => {
+        const y = horizon + H * (0.05 + k * 0.06), half = W * (0.12 - k * 0.018)
+        return <line key={k} x1={sunX - half} x2={sunX + half} y1={y} y2={y} stroke="#FFF1C9" strokeOpacity={0.6} strokeWidth={H * 0.012} strokeLinecap="round" />
+      })}
+      {[0, 1, 2].map((b) => {
+        const bx = W * (0.18 + b * 0.09), by = H * (0.22 + (b % 2) * 0.05), s = W * 0.025
+        return <path key={b} d={`M${bx - s} ${by} Q${bx - s / 2} ${by - s * 0.6} ${bx} ${by} Q${bx + s / 2} ${by - s * 0.6} ${bx + s} ${by}`} stroke="#5A2A3A" strokeOpacity={0.65} strokeWidth={W * 0.006} fill="none" strokeLinecap="round" />
+      })}
+    </svg>
+  )
+}
+
+export function Cover({ group, className }: { group: Pick<Group, 'id' | 'cover' | 'type' | 'theme' | 'destination' | 'name'>; className?: string }) {
   return group.cover ? (
     <img src={group.cover} alt="" className={cn('object-cover', className)} />
   ) : (
-    <HillsArt seed={group.id} outing={group.type === 'outing'} className={className} />
+    <ThemeArt theme={themeOf(group)} seed={group.id} className={className} />
+  )
+}
+
+export function ThemeChip({ theme, onDark = true, onClick }: { theme: TripTheme; onDark?: boolean; onClick?: () => void }) {
+  const t = themeInfo(theme)
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold', onDark ? 'bg-black/30 text-white backdrop-blur' : '')}
+      style={onDark ? undefined : { background: `${t.accent}22`, color: t.accent }}
+    >
+      {t.emoji} {t.label}
+    </button>
   )
 }
 
